@@ -109,25 +109,23 @@ for dev in devices:
         disk['type'] = 'SSD'
     elif 'Rotation Rate' in disk['info']:
         disk['type'] = 'HDD'
-    elif disk['info'].get('Form Factor', '') in ('2.5 inches', '3.5 inches'):
-        # Form Factor finns men inte Rotation Rate — troligen HDD
-        # (SSD:ar rapporterar vanligtvis 'Solid State Device' som Rotation Rate)
-        attr_names = [a.get('name','') for a in disk['attributes']]
-        if 'Spin_Retry_Count' in attr_names or 'Spin_Up_Time' in attr_names:
-            disk['type'] = 'HDD'
-        elif 'Media_Wearout_Indicator' in attr_names or 'Wear_Leveling_Count' in attr_names:
-            disk['type'] = 'SSD'
-        else:
-            disk['type'] = 'HDD'
     else:
-        # Sista fallback: kolla SMART-attribut
-        attr_names = [a.get('name','') for a in disk['attributes']]
-        if 'Spin_Retry_Count' in attr_names or 'Spin_Up_Time' in attr_names:
+        # Fallback: kolla attribut-ID:n direkt (mer tillförlitligt än namn)
+        attr_ids = set(a.get('id', 0) for a in disk['attributes'])
+        # ID 10 = Spin_Retry_Count, ID 3 = Spin_Up_Time → snurrande disk
+        # ID 233 = Media_Wearout_Indicator, ID 177 = Wear_Leveling_Count → SSD
+        if 10 in attr_ids or 3 in attr_ids:
             disk['type'] = 'HDD'
-        elif 'Media_Wearout_Indicator' in attr_names or 'Wear_Leveling_Count' in attr_names:
+        elif 233 in attr_ids or 177 in attr_ids:
             disk['type'] = 'SSD'
-        elif any(a.get('id') == 194 for a in disk['attributes']):
-            # Har Temperature_Celsius men inga SSD-specifika → troligen HDD
+        elif 'Model Family' in disk['info']:
+            # Har Model Family → SATA-disk, troligen HDD om inte SSD-familj
+            family = disk['info']['Model Family'].lower()
+            if any(s in family for s in ('ssd', 'solid state')):
+                disk['type'] = 'SSD'
+            else:
+                disk['type'] = 'HDD'
+        elif 194 in attr_ids:
             disk['type'] = 'HDD'
         else:
             disk['type'] = 'Unknown'
