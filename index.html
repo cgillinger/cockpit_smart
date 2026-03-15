@@ -11,6 +11,9 @@
             padding: 20px;
             background: #f0f0f0;
             color: #151515;
+            overflow-x: hidden;
+            max-width: 100%;
+            box-sizing: border-box;
         }
 
         h1 {
@@ -70,8 +73,9 @@
 
         .disk-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
             gap: 16px;
+            max-width: 100%;
         }
 
         .disk-card {
@@ -155,6 +159,7 @@
         .info-grid dt {
             color: #6a6e73;
             margin: 0;
+            white-space: nowrap;
         }
         .info-grid dd {
             margin: 0;
@@ -203,6 +208,10 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+        .attr-table td:nth-child(2) {
+            white-space: normal;
+            word-break: break-all;
         }
         .attr-table tr:hover td {
             background: #fafafa;
