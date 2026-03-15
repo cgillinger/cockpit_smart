@@ -109,8 +109,28 @@ for dev in devices:
         disk['type'] = 'SSD'
     elif 'Rotation Rate' in disk['info']:
         disk['type'] = 'HDD'
+    elif disk['info'].get('Form Factor', '') in ('2.5 inches', '3.5 inches'):
+        # Form Factor finns men inte Rotation Rate — troligen HDD
+        # (SSD:ar rapporterar vanligtvis 'Solid State Device' som Rotation Rate)
+        attr_names = [a.get('name','') for a in disk['attributes']]
+        if 'Spin_Retry_Count' in attr_names or 'Spin_Up_Time' in attr_names:
+            disk['type'] = 'HDD'
+        elif 'Media_Wearout_Indicator' in attr_names or 'Wear_Leveling_Count' in attr_names:
+            disk['type'] = 'SSD'
+        else:
+            disk['type'] = 'HDD'
     else:
-        disk['type'] = 'Unknown'
+        # Sista fallback: kolla SMART-attribut
+        attr_names = [a.get('name','') for a in disk['attributes']]
+        if 'Spin_Retry_Count' in attr_names or 'Spin_Up_Time' in attr_names:
+            disk['type'] = 'HDD'
+        elif 'Media_Wearout_Indicator' in attr_names or 'Wear_Leveling_Count' in attr_names:
+            disk['type'] = 'SSD'
+        elif any(a.get('id') == 194 for a in disk['attributes']):
+            # Har Temperature_Celsius men inga SSD-specifika → troligen HDD
+            disk['type'] = 'HDD'
+        else:
+            disk['type'] = 'Unknown'
 
     # Kort namn
     model = disk['info'].get('Device Model', disk['info'].get('Model Number', dev))
