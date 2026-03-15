@@ -269,15 +269,6 @@
     <script>
         /* global cockpit */
 
-        // Load cockpit.js if available (Cockpit environment)
-        // Falls back gracefully for standalone testing
-        var cockpitAvailable = false;
-        try {
-            if (typeof cockpit !== 'undefined') {
-                cockpitAvailable = true;
-            }
-        } catch(e) {}
-
         // Key SMART attributes to highlight
         var CRITICAL_ATTRS = {
             5:   'Reallocated_Sector_Ct',
@@ -319,6 +310,8 @@
         function loadData() {
             setStatus('Hämtar SMART-data…', true);
             document.getElementById('content').innerHTML = '';
+
+            var cockpitAvailable = (typeof cockpit !== 'undefined' && cockpit.spawn);
 
             if (cockpitAvailable) {
                 var proc = cockpit.spawn(
@@ -679,9 +672,11 @@
             ];
         }
 
-        // Initial load
-        loadData();
     </script>
     <script src="../base1/cockpit.js"></script>
+    <script>
+        // Kör efter cockpit.js laddats
+        loadData();
+    </script>
 </body>
 </html>
