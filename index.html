@@ -291,6 +291,97 @@
         .attr-details.show {
             display: block;
         }
+
+        /* Trend / changes section */
+        .changes-section {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #eee;
+        }
+        .changes-section .attr-section-title {
+            margin-bottom: 8px;
+        }
+        .change-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            padding: 4px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        .change-item:last-child {
+            border-bottom: none;
+        }
+        .change-icon {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .change-icon.warn {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .change-icon.danger {
+            background: #fce4e4;
+            color: #c9190b;
+        }
+        .change-icon.info {
+            background: #e7f1fa;
+            color: #002952;
+        }
+        .change-text {
+            flex: 1;
+            min-width: 0;
+        }
+        .change-text .attr-name {
+            font-weight: 600;
+        }
+        .change-detail {
+            color: #6a6e73;
+        }
+        .no-changes {
+            font-size: 12px;
+            color: #6a6e73;
+            font-style: italic;
+            padding: 4px 0;
+        }
+
+        /* Sparklines */
+        .sparkline {
+            flex-shrink: 0;
+        }
+        .sparkline polyline {
+            fill: none;
+            stroke: #06c;
+            stroke-width: 1.5;
+            stroke-linejoin: round;
+            stroke-linecap: round;
+        }
+        .sparkline circle {
+            fill: #06c;
+        }
+        .sparkline .spark-area {
+            fill: rgba(0, 102, 204, 0.08);
+            stroke: none;
+        }
+        .change-icon.danger + .change-text + .sparkline polyline,
+        .change-icon.danger + .change-text + .sparkline circle {
+            stroke: #c9190b;
+            fill: #c9190b;
+        }
+
+        /* History status */
+        .history-status {
+            font-size: 11px;
+            color: #6a6e73;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
@@ -309,6 +400,9 @@
 
     <script>
         /* global cockpit */
+
+        // Global history data, loaded once
+        var historyData = null;
 
         // Key SMART attributes to highlight
         var CRITICAL_ATTRS = {
@@ -355,31 +449,66 @@
             var cockpitAvailable = (typeof cockpit !== 'undefined' && cockpit.spawn);
 
             if (cockpitAvailable) {
-                var proc = cockpit.spawn(
-                    ["bash", "/usr/share/cockpit/cockpit-smart/scripts/smart-collect.sh"],
-                    { superuser: "try", err: "message" }
-                );
-                proc.done(function(output) {
-                    try {
-                        var data = JSON.parse(output);
-                        renderDisks(data);
-                        setStatus('Uppdaterad ' + new Date().toLocaleTimeString('sv-SE'), false);
-                    } catch(e) {
-                        showError('Kunde inte tolka SMART-data: ' + e.message);
-                        setStatus('Fel vid tolkning', false);
-                    }
-                });
-                proc.fail(function(ex) {
-                    showError('Kunde inte hämta SMART-data: ' + (ex.message || ex.toString()));
-                    setStatus('Fel vid hämtning', false);
+                // Load history first, then current data
+                loadHistory(function() {
+                    var proc = cockpit.spawn(
+                        ["bash", "/usr/share/cockpit/cockpit-smart/scripts/smart-collect.sh"],
+                        { superuser: "try", err: "message" }
+                    );
+                    proc.done(function(output) {
+                        try {
+                            var data = JSON.parse(output);
+                            renderDisks(data);
+                            setStatus('Uppdaterad ' + new Date().toLocaleTimeString('sv-SE'), false);
+                        } catch(e) {
+                            showError('Kunde inte tolka SMART-data: ' + e.message);
+                            setStatus('Fel vid tolkning', false);
+                        }
+                    });
+                    proc.fail(function(ex) {
+                        showError('Kunde inte hämta SMART-data: ' + (ex.message || ex.toString()));
+                        setStatus('Fel vid hämtning', false);
+                    });
                 });
             } else {
                 // Standalone test mode — use mock data
                 setTimeout(function() {
+                    historyData = getMockHistory();
                     renderDisks(getMockData());
                     setStatus('Testdata (ingen Cockpit-anslutning)', false);
                 }, 500);
             }
+        }
+
+        function loadHistory(callback) {
+            var proc = cockpit.spawn(
+                ["cat", "/var/log/smart-history.json"],
+                { superuser: "try", err: "message" }
+            );
+            proc.done(function(output) {
+                historyData = parseJsonl(output);
+                callback();
+            });
+            proc.fail(function() {
+                // No history file yet — that's fine
+                historyData = [];
+                callback();
+            });
+        }
+
+        function parseJsonl(text) {
+            var records = [];
+            var lines = text.trim().split('\n');
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim();
+                if (!line) continue;
+                try {
+                    records.push(JSON.parse(line));
+                } catch(e) {
+                    // Skip malformed lines
+                }
+            }
+            return records;
         }
 
         function showError(msg) {
@@ -476,6 +605,14 @@
                     card.appendChild(renderNvmeAttrs(attrs));
                 } else {
                     card.appendChild(renderSataAttrs(attrs, idx));
+                }
+            }
+
+            // Changes / trend section
+            if (historyData && historyData.length > 0) {
+                var changesSection = renderChanges(disk, historyData);
+                if (changesSection) {
+                    card.appendChild(changesSection);
                 }
             }
 
@@ -636,6 +773,290 @@
             return wrapper;
         }
 
+        // --- Trend detection and rendering ---
+
+        function getDeviceHistory(device, records) {
+            // Extract attribute snapshots for a specific device across all records
+            var snapshots = [];
+            for (var i = 0; i < records.length; i++) {
+                var rec = records[i];
+                var disks = rec.disks || [];
+                for (var j = 0; j < disks.length; j++) {
+                    if (disks[j].device === device) {
+                        snapshots.push({
+                            timestamp: rec.timestamp,
+                            attributes: disks[j].attributes || []
+                        });
+                        break;
+                    }
+                }
+            }
+            return snapshots;
+        }
+
+        function parseNumeric(str) {
+            // Extract numeric value from strings like "100%", "46 Celsius", "0x00", "892"
+            if (typeof str === 'number') return str;
+            if (typeof str !== 'string') return null;
+            str = str.trim();
+            if (str.indexOf('0x') === 0) return parseInt(str, 16);
+            var match = str.match(/^[\d,]+(\.\d+)?/);
+            if (match) return parseFloat(match[0].replace(/,/g, ''));
+            return null;
+        }
+
+        function getAttrTimeSeries(snapshots, matchFn) {
+            // Build time series for an attribute using a match function
+            var series = [];
+            for (var i = 0; i < snapshots.length; i++) {
+                var attrs = snapshots[i].attributes;
+                for (var j = 0; j < attrs.length; j++) {
+                    if (matchFn(attrs[j])) {
+                        series.push({
+                            timestamp: snapshots[i].timestamp,
+                            attr: attrs[j]
+                        });
+                        break;
+                    }
+                }
+            }
+            return series;
+        }
+
+        function detectChanges(currentDisk, records) {
+            var changes = [];
+            var snapshots = getDeviceHistory(currentDisk.device, records);
+            if (snapshots.length === 0) return changes;
+
+            var prev = snapshots[snapshots.length - 1];
+            var isNvme = currentDisk.type === 'NVMe';
+            var currentAttrs = currentDisk.attributes || [];
+
+            if (isNvme) {
+                // NVMe: compare all attributes by name, flag numeric changes
+                currentAttrs.forEach(function(cur) {
+                    var prevAttr = null;
+                    for (var i = 0; i < prev.attributes.length; i++) {
+                        if (prev.attributes[i].name === cur.name) {
+                            prevAttr = prev.attributes[i];
+                            break;
+                        }
+                    }
+                    if (!prevAttr) return;
+
+                    var curVal = parseNumeric(cur.raw);
+                    var prevVal = parseNumeric(prevAttr.raw);
+                    if (curVal === null || prevVal === null) return;
+                    if (curVal === prevVal) return;
+
+                    var diff = curVal - prevVal;
+                    var diffStr = (diff > 0 ? '+' : '') + diff;
+
+                    // Determine severity
+                    var severity = 'info';
+                    var name = cur.name;
+                    if (name === 'Available Spare' && diff < 0) severity = 'warn';
+                    if (name === 'Percentage Used' && diff > 0) severity = 'warn';
+                    if (name === 'Media and Data Integrity Errors' && diff > 0) severity = 'danger';
+                    if (name === 'Unsafe Shutdowns' && diff > 0) severity = 'warn';
+
+                    // Build sparkline data
+                    var series = getAttrTimeSeries(snapshots, function(a) { return a.name === cur.name; });
+                    var sparkData = series.map(function(s) { return parseNumeric(s.attr.raw); }).filter(function(v) { return v !== null; });
+                    sparkData.push(curVal);
+
+                    changes.push({
+                        name: cur.name,
+                        severity: severity,
+                        detail: prevAttr.raw + ' → ' + cur.raw + ' (' + diffStr + ')',
+                        sparkData: sparkData.slice(-30)
+                    });
+                });
+            } else {
+                // SATA: check all attributes generically
+                currentAttrs.forEach(function(cur) {
+                    var prevAttr = null;
+                    for (var i = 0; i < prev.attributes.length; i++) {
+                        if (prev.attributes[i].id === cur.id) {
+                            prevAttr = prev.attributes[i];
+                            break;
+                        }
+                    }
+                    if (!prevAttr) return;
+
+                    var curRaw = parseNumeric(cur.raw);
+                    var prevRaw = parseNumeric(prevAttr.raw);
+
+                    // Check 1: raw value changed (exclude Power_On_Hours and Power_Cycle_Count by checking value stability)
+                    var rawChanged = (curRaw !== null && prevRaw !== null && curRaw !== prevRaw);
+
+                    // Check 2: value dropped
+                    var valueDrop = (cur.value < prevAttr.value);
+
+                    // Check 3: value approaching threshold
+                    var nearThresh = (cur.thresh > 0 && cur.value < cur.thresh * 2);
+
+                    if (!rawChanged && !valueDrop && !nearThresh) return;
+
+                    var severity = 'info';
+                    var details = [];
+
+                    if (rawChanged) {
+                        var rawDiff = curRaw - prevRaw;
+                        var rawDiffStr = (rawDiff > 0 ? '+' : '') + rawDiff;
+                        details.push('raw: ' + prevAttr.raw + ' → ' + cur.raw + ' (' + rawDiffStr + ')');
+                        // Increased raw on critical attrs is more serious
+                        if (CRITICAL_ATTRS[cur.id] && rawDiff > 0) severity = 'danger';
+                    }
+
+                    if (valueDrop) {
+                        var valDiff = cur.value - prevAttr.value;
+                        details.push('value: ' + prevAttr.value + ' → ' + cur.value + ' (' + valDiff + ')');
+                        severity = (severity === 'danger') ? 'danger' : 'warn';
+                    }
+
+                    if (nearThresh) {
+                        details.push('närmar sig tröskel (' + cur.value + '/' + cur.thresh + ')');
+                        severity = 'danger';
+                    }
+
+                    // Sparkline data for the raw value
+                    var series = getAttrTimeSeries(snapshots, function(a) { return a.id === cur.id; });
+                    var sparkData = series.map(function(s) { return parseNumeric(s.attr.raw); }).filter(function(v) { return v !== null; });
+                    sparkData.push(curRaw !== null ? curRaw : 0);
+
+                    changes.push({
+                        name: cur.name,
+                        severity: severity,
+                        detail: details.join(', '),
+                        sparkData: sparkData.slice(-30)
+                    });
+                });
+            }
+
+            // Sort: danger first, then warn, then info
+            var severityOrder = { danger: 0, warn: 1, info: 2 };
+            changes.sort(function(a, b) {
+                return (severityOrder[a.severity] || 3) - (severityOrder[b.severity] || 3);
+            });
+
+            return changes;
+        }
+
+        function renderChanges(disk, records) {
+            var section = document.createElement('div');
+            section.className = 'changes-section';
+
+            var title = document.createElement('p');
+            title.className = 'attr-section-title';
+            title.textContent = 'Förändringar';
+            section.appendChild(title);
+
+            var changes = detectChanges(disk, records);
+
+            if (changes.length === 0) {
+                var noChanges = document.createElement('div');
+                noChanges.className = 'no-changes';
+                noChanges.textContent = 'Inga förändringar sedan senaste mätning.';
+                section.appendChild(noChanges);
+            } else {
+                changes.forEach(function(change) {
+                    var item = document.createElement('div');
+                    item.className = 'change-item';
+
+                    var icon = document.createElement('span');
+                    icon.className = 'change-icon ' + change.severity;
+                    icon.textContent = change.severity === 'danger' ? '!' : change.severity === 'warn' ? '~' : 'i';
+                    item.appendChild(icon);
+
+                    var text = document.createElement('span');
+                    text.className = 'change-text';
+                    text.innerHTML = '<span class="attr-name">' + escapeHtml(change.name) + '</span> <span class="change-detail">' + escapeHtml(change.detail) + '</span>';
+                    item.appendChild(text);
+
+                    if (change.sparkData && change.sparkData.length >= 2) {
+                        item.appendChild(createSparkline(change.sparkData));
+                    }
+
+                    section.appendChild(item);
+                });
+            }
+
+            // History info
+            var snapshots = getDeviceHistory(disk.device, records);
+            if (snapshots.length > 0) {
+                var statusDiv = document.createElement('div');
+                statusDiv.className = 'history-status';
+                var oldest = snapshots[0].timestamp.substring(0, 10);
+                var newest = snapshots[snapshots.length - 1].timestamp.substring(0, 10);
+                statusDiv.textContent = 'Historik: ' + snapshots.length + ' mätningar (' + oldest + ' – ' + newest + ')';
+                section.appendChild(statusDiv);
+            }
+
+            return section;
+        }
+
+        function createSparkline(data) {
+            var width = 60;
+            var height = 20;
+            var padding = 2;
+
+            var min = data[0], max = data[0];
+            for (var i = 1; i < data.length; i++) {
+                if (data[i] < min) min = data[i];
+                if (data[i] > max) max = data[i];
+            }
+
+            // Avoid flat line at exact zero range
+            if (max === min) { max = min + 1; }
+
+            var points = [];
+            var areaPoints = [];
+            var stepX = (width - padding * 2) / (data.length - 1);
+
+            for (var i = 0; i < data.length; i++) {
+                var x = padding + i * stepX;
+                var y = height - padding - ((data[i] - min) / (max - min)) * (height - padding * 2);
+                points.push(x.toFixed(1) + ',' + y.toFixed(1));
+                areaPoints.push(x.toFixed(1) + ',' + y.toFixed(1));
+            }
+
+            // Close area polygon
+            areaPoints.push((padding + (data.length - 1) * stepX).toFixed(1) + ',' + (height - padding));
+            areaPoints.push(padding.toFixed(1) + ',' + (height - padding));
+
+            var lastX = padding + (data.length - 1) * stepX;
+            var lastY = height - padding - ((data[data.length - 1] - min) / (max - min)) * (height - padding * 2);
+
+            var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'sparkline');
+            svg.setAttribute('width', width);
+            svg.setAttribute('height', height);
+            svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+
+            var area = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            area.setAttribute('class', 'spark-area');
+            area.setAttribute('points', areaPoints.join(' '));
+            svg.appendChild(area);
+
+            var polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+            polyline.setAttribute('points', points.join(' '));
+            svg.appendChild(polyline);
+
+            var dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            dot.setAttribute('cx', lastX.toFixed(1));
+            dot.setAttribute('cy', lastY.toFixed(1));
+            dot.setAttribute('r', '2');
+            svg.appendChild(dot);
+
+            // Tooltip
+            svg.innerHTML = '<title>' + data.join(', ') + '</title>' + svg.innerHTML;
+
+            return svg;
+        }
+
+        // --- Mock data ---
+
         function getMockData() {
             return [
                 {
@@ -723,6 +1144,41 @@
                     ]
                 }
             ];
+        }
+
+        function getMockHistory() {
+            // Simulate 5 days of history with gradual changes
+            var base = getMockData();
+            var records = [];
+            for (var day = 5; day >= 1; day--) {
+                var d = new Date();
+                d.setDate(d.getDate() - day);
+                var ts = d.toISOString().replace(/\.\d+Z/, 'Z');
+                var snapshot = JSON.parse(JSON.stringify(base));
+                // Simulate changing values over time
+                snapshot.forEach(function(disk) {
+                    disk.attributes.forEach(function(attr) {
+                        if (attr.id === 9) { // Power_On_Hours
+                            attr.raw = String(parseInt(attr.raw) - day * 24);
+                        }
+                        if (attr.id === 194) { // Temperature
+                            attr.raw = String(parseInt(attr.raw) - day + 3);
+                        }
+                        if (attr.id === 5 && disk.device === '/dev/sdb') { // Simulate realloc growth
+                            attr.raw = String(Math.max(0, parseInt(attr.raw) - 2));
+                        }
+                        if (attr.name === 'Power On Hours') {
+                            attr.raw = String(parseInt(attr.raw) - day * 24);
+                        }
+                        if (attr.name === 'Percentage Used') {
+                            var v = parseInt(attr.raw) - 1;
+                            attr.raw = (v > 0 ? v : 0) + '%';
+                        }
+                    });
+                });
+                records.push({ timestamp: ts, disks: snapshot });
+            }
+            return records;
         }
 
     </script>

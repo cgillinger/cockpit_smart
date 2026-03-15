@@ -1,60 +1,87 @@
-# cockpit-smart — SMART Diskstatus för Cockpit
+# cockpit-smart — SMART Diskstatus for Cockpit
 
-Cockpit-plugin som visar S.M.A.R.T.-hälsa och attribut för alla anslutna diskar.
+Cockpit plugin that displays S.M.A.R.T. health and attributes for all connected disks, with history tracking and trend detection.
 
-## Funktioner
+## Features
 
-- Hälsostatus (PASSED/FAILED) per disk
-- Automatisk identifiering av disktyp (HDD/SSD/NVMe)
-- Nyckelattribut markerade (reallocated sectors, pending sectors, etc.)
-- NVMe-specifika attribut (available spare, percentage used, media errors)
-- Varningsmarkeringar för kritiska värden
-- Expanderbara detaljer för alla SMART-attribut
-- Manuell uppdatering via knapp
+- Health status (PASSED/FAILED) per disk
+- Automatic disk type identification (HDD/SSD/NVMe)
+- Key attributes highlighted (reallocated sectors, pending sectors, etc.)
+- NVMe-specific attributes (available spare, percentage used, media errors)
+- Warning markers for critical values
+- Expandable details for all SMART attributes
+- Manual refresh button
 
-## Diskar som visas (server2)
+### History and Trend Detection
 
-| Disk | Typ | Enhet |
-|------|-----|-------|
-| Intel SSD 520 120GB | SSD | /dev/sda |
-| Samsung PM9C1 512GB | NVMe | /dev/nvme0n1 |
-| WD Green 3TB | HDD | /dev/sdb |
-| WD Red Plus 6TB | HDD | /dev/sdc |
+- **Daily logging**: `smart-history.sh` collects SMART data and appends it as JSONL to `/var/log/smart-history.json`
+- **Change detection**: Automatically flags attributes that changed since the previous measurement
+  - SATA: raw value changes, value drops, threshold proximity (< 2x threshold)
+  - NVMe: numeric changes in all attributes
+  - Generalized logic — works for any disk type without hardcoded attribute lists
+- **Sparklines**: Inline SVG mini-graphs showing trends over the last 30 data points
+- **Severity levels**: Danger (red), warning (yellow), info (blue) — sorted by severity
+- **Log rotation**: 365 days retention with compression
 
 ## Installation
 
 ```bash
-# På server2 (192.168.50.8)
 sudo bash install.sh
 ```
 
-Kräver: `smartmontools`, `python3`, `cockpit`
+This will:
+- Install `smartmontools` if not present
+- Copy plugin files to `/usr/share/cockpit/cockpit-smart/`
+- Set up a daily cron job (08:00) for history collection
+- Configure logrotate (365 days retention)
 
-## Åtkomst
+Requirements: `smartmontools`, `python3`, `cockpit`
 
-- LAN: `https://192.168.50.8:9090/cockpit-smart/`
-- Tailscale: `https://100.105.110.22:9090/cockpit-smart/`
+## Access
 
-Alternativt: Klicka "SMART Status" i Cockpit-menyn.
+Open Cockpit in your browser and click **SMART Status** in the menu.
 
-## Filstruktur
+URL: `https://<your-server>:9090/cockpit-smart/`
+
+## File Structure
 
 ```
 cockpit-smart/
-├── manifest.json              # Cockpit plugin-manifest
+├── manifest.json              # Cockpit plugin manifest
 ├── index.html                 # UI (HTML + CSS + JS)
 ├── scripts/
-│   └── smart-collect.sh       # Datainsamling (smartctl → JSON)
-├── install.sh                 # Installationsskript
+│   ├── smart-collect.sh       # Data collection (smartctl → JSON)
+│   └── smart-history.sh       # History logging (JSONL with timestamp)
+├── install.sh                 # Installation script (plugin + cron + logrotate)
 └── README.md
 ```
 
-## Hur det fungerar
+## How It Works
 
-1. `index.html` använder `cockpit.spawn()` för att köra `smart-collect.sh` med superuser-rättigheter
-2. `smart-collect.sh` kör `smartctl` mot alla diskar och samlar info/hälsa/attribut
-3. Output tolkas som JSON och renderas som kort per disk i webbgränssnittet
+1. `index.html` uses `cockpit.spawn()` to run `smart-collect.sh` with superuser privileges
+2. `smart-collect.sh` runs `smartctl` against all disks and collects info/health/attributes
+3. Output is parsed as JSON and rendered as cards per disk in the web UI
+4. History is loaded from `/var/log/smart-history.json` and compared to current data
+5. Changes are displayed in a "Forandringar" (Changes) section per disk card with sparklines
 
-## Testning utan Cockpit
+### History Format (JSONL)
 
-Öppna `index.html` direkt i en webbläsare — den faller tillbaka på mockdata som matchar server2:s diskar.
+Each line in `/var/log/smart-history.json` is a complete JSON object:
+
+```json
+{"timestamp":"2025-03-15T08:00:00Z","disks":[...]}
+```
+
+The `disks` array has the same structure as `smart-collect.sh` output.
+
+## Testing Without Cockpit
+
+Open `index.html` directly in a browser — it falls back to mock data with simulated history for testing the trend detection and sparkline features.
+
+## Cron Schedule
+
+The history collection runs daily at 08:00 via `/etc/cron.d/smart-history`. Adjust the schedule by editing that file if your server has different wake/sleep times.
+
+## License
+
+MIT
