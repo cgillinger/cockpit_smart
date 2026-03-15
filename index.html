@@ -80,6 +80,8 @@
             border-radius: 6px;
             padding: 16px;
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            overflow: hidden;
+            min-width: 0;
         }
 
         .disk-header {
@@ -87,12 +89,18 @@
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 12px;
+            gap: 8px;
+            min-width: 0;
         }
 
         .disk-title {
             font-size: 16px;
             font-weight: 600;
             margin: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
         }
 
         .disk-device {
@@ -151,6 +159,9 @@
         .info-grid dd {
             margin: 0;
             font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .attr-section-title {
@@ -162,10 +173,16 @@
             letter-spacing: 0.5px;
         }
 
+        .attr-table-wrapper {
+            overflow-x: auto;
+            margin: 0 -2px;
+            padding: 0 2px;
+        }
         .attr-table {
             width: 100%;
             border-collapse: collapse;
             font-size: 12px;
+            table-layout: fixed;
         }
         .attr-table th {
             text-align: left;
@@ -176,9 +193,16 @@
             font-weight: 600;
             white-space: nowrap;
         }
+        .attr-table col.col-id { width: 32px; }
+        .attr-table col.col-attr { width: auto; }
+        .attr-table col.col-num { width: 52px; }
+        .attr-table col.col-raw { width: 72px; }
         .attr-table td {
             padding: 3px 8px;
             border-bottom: 1px solid #f5f5f5;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .attr-table tr:hover td {
             background: #fafafa;
@@ -207,10 +231,18 @@
         }
         .nvme-kv-item .kv-label {
             color: #6a6e73;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
         }
         .nvme-kv-item .kv-value {
             font-weight: 600;
             text-align: right;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
         }
 
         .error-msg {
@@ -374,9 +406,12 @@
             header.className = 'disk-header';
 
             var titleDiv = document.createElement('div');
+            titleDiv.style.minWidth = '0';
+            titleDiv.style.overflow = 'hidden';
             var title = document.createElement('h3');
             title.className = 'disk-title';
             title.textContent = disk.model || disk.device;
+            title.title = disk.model || disk.device;
             if (disk.type) {
                 var typeBadge = document.createElement('span');
                 typeBadge.className = 'disk-type-badge';
@@ -419,6 +454,7 @@
                     dl.appendChild(dt);
                     var dd = document.createElement('dd');
                     dd.textContent = info[key];
+                    dd.title = info[key];
                     dl.appendChild(dd);
                 });
                 card.appendChild(dl);
@@ -539,8 +575,15 @@
         }
 
         function createAttrTable(attrs, highlight) {
+            var wrapper = document.createElement('div');
+            wrapper.className = 'attr-table-wrapper';
+
             var table = document.createElement('table');
             table.className = 'attr-table';
+
+            var colgroup = document.createElement('colgroup');
+            colgroup.innerHTML = '<col class="col-id"><col class="col-attr"><col class="col-num"><col class="col-num"><col class="col-num"><col class="col-raw">';
+            table.appendChild(colgroup);
 
             var thead = document.createElement('thead');
             thead.innerHTML = '<tr><th>ID</th><th>Attribut</th><th>Värde</th><th>Sämsta</th><th>Tröskel</th><th>Råvärde</th></tr>';
@@ -580,7 +623,8 @@
                 tbody.appendChild(tr);
             });
             table.appendChild(tbody);
-            return table;
+            wrapper.appendChild(table);
+            return wrapper;
         }
 
         function getMockData() {
