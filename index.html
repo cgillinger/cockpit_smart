@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SMART Status</title>
+    <meta charset="utf-8">
+    <link href="../base1/cockpit.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: "RedHatText", "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f0f0f0;
+            color: #151515;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0 0 6px 0;
+        }
+
+        .subtitle {
+            color: #6a6e73;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #06c;
+            color: #fff;
+            transition: background 0.15s;
+        }
+        .btn:hover { background: #004080; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn svg { width: 16px; height: 16px; }
+
+        .status-msg {
+            font-size: 13px;
+            color: #6a6e73;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #6a6e73;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .disk-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            gap: 16px;
+        }
+
+        .disk-card {
+            background: #fff;
+            border: 1px solid #d2d2d2;
+            border-radius: 6px;
+            padding: 16px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .disk-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .disk-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .disk-device {
+            font-size: 12px;
+            color: #6a6e73;
+            margin-top: 2px;
+        }
+
+        .health-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .health-passed {
+            background: #e7f5e7;
+            color: #1e4620;
+        }
+        .health-failed {
+            background: #fce4e4;
+            color: #7d1007;
+        }
+        .health-unknown {
+            background: #f0f0f0;
+            color: #6a6e73;
+        }
+
+        .disk-type-badge {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #e7f1fa;
+            color: #002952;
+            margin-left: 8px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 2px 12px;
+            font-size: 13px;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .info-grid dt {
+            color: #6a6e73;
+            margin: 0;
+        }
+        .info-grid dd {
+            margin: 0;
+            font-weight: 500;
+        }
+
+        .attr-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #6a6e73;
+            margin: 0 0 6px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .attr-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        .attr-table th {
+            text-align: left;
+            padding: 4px 8px;
+            background: #fafafa;
+            border-bottom: 1px solid #eee;
+            color: #6a6e73;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .attr-table td {
+            padding: 3px 8px;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        .attr-table tr:hover td {
+            background: #fafafa;
+        }
+
+        .attr-warn {
+            color: #c9190b;
+            font-weight: 600;
+        }
+
+        .attr-highlight {
+            background: #fff3cd !important;
+        }
+
+        .nvme-kv {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .nvme-kv-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            padding: 3px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        .nvme-kv-item .kv-label {
+            color: #6a6e73;
+        }
+        .nvme-kv-item .kv-value {
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .error-msg {
+            padding: 12px;
+            background: #fce4e4;
+            border: 1px solid #c9190b;
+            border-radius: 4px;
+            color: #7d1007;
+            margin: 20px 0;
+        }
+
+        /* Collapsible details */
+        .attr-toggle {
+            background: none;
+            border: none;
+            font-size: 13px;
+            color: #06c;
+            cursor: pointer;
+            padding: 4px 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .attr-toggle:hover { text-decoration: underline; }
+        .attr-toggle svg {
+            width: 12px;
+            height: 12px;
+            transition: transform 0.2s;
+        }
+        .attr-toggle.expanded svg {
+            transform: rotate(90deg);
+        }
+        .attr-details {
+            display: none;
+            margin-top: 6px;
+        }
+        .attr-details.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>SMART Diskstatus</h1>
+    <p class="subtitle">S.M.A.R.T.-hälsa och attribut för alla anslutna diskar</p>
+
+    <div class="controls">
+        <button class="btn" id="refreshBtn" onclick="loadData()">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M14 8a6 6 0 1 1-1.06-3.39l-1.22 1.22A4.5 4.5 0 1 0 12.5 8H11l2.5-3L16 8h-2z"/></svg>
+            Uppdatera
+        </button>
+        <span class="status-msg" id="statusMsg"></span>
+    </div>
+
+    <div id="content"></div>
+
+    <script>
+        /* global cockpit */
+
+        // Load cockpit.js if available (Cockpit environment)
+        // Falls back gracefully for standalone testing
+        var cockpitAvailable = false;
+        try {
+            if (typeof cockpit !== 'undefined') {
+                cockpitAvailable = true;
+            }
+        } catch(e) {}
+
+        // Key SMART attributes to highlight
+        var CRITICAL_ATTRS = {
+            5:   'Reallocated_Sector_Ct',
+            10:  'Spin_Retry_Count',
+            184: 'End-to-End_Error',
+            187: 'Reported_Uncorrect',
+            188: 'Command_Timeout',
+            196: 'Reallocated_Event_Count',
+            197: 'Current_Pending_Sector',
+            198: 'Offline_Uncorrectable',
+        };
+
+        var IMPORTANT_ATTRS = {
+            1:   'Raw_Read_Error_Rate',
+            9:   'Power_On_Hours',
+            12:  'Power_Cycle_Count',
+            194: 'Temperature_Celsius',
+            199: 'UDMA_CRC_Error_Count',
+            200: 'Multi_Zone_Error_Rate',
+            233: 'Media_Wearout_Indicator',
+        };
+
+        function setStatus(msg, loading) {
+            var el = document.getElementById('statusMsg');
+            if (loading) {
+                el.innerHTML = '<span class="spinner"></span>' + escapeHtml(msg);
+            } else {
+                el.textContent = msg;
+            }
+            document.getElementById('refreshBtn').disabled = loading;
+        }
+
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function loadData() {
+            setStatus('Hämtar SMART-data…', true);
+            document.getElementById('content').innerHTML = '';
+
+            if (cockpitAvailable) {
+                var proc = cockpit.spawn(
+                    ["bash", "/usr/share/cockpit/cockpit-smart/scripts/smart-collect.sh"],
+                    { superuser: "try", err: "message" }
+                );
+                proc.done(function(output) {
+                    try {
+                        var data = JSON.parse(output);
+                        renderDisks(data);
+                        setStatus('Uppdaterad ' + new Date().toLocaleTimeString('sv-SE'), false);
+                    } catch(e) {
+                        showError('Kunde inte tolka SMART-data: ' + e.message);
+                        setStatus('Fel vid tolkning', false);
+                    }
+                });
+                proc.fail(function(ex) {
+                    showError('Kunde inte hämta SMART-data: ' + (ex.message || ex.toString()));
+                    setStatus('Fel vid hämtning', false);
+                });
+            } else {
+                // Standalone test mode — use mock data
+                setTimeout(function() {
+                    renderDisks(getMockData());
+                    setStatus('Testdata (ingen Cockpit-anslutning)', false);
+                }, 500);
+            }
+        }
+
+        function showError(msg) {
+            document.getElementById('content').innerHTML =
+                '<div class="error-msg">' + escapeHtml(msg) + '</div>';
+        }
+
+        function renderDisks(disks) {
+            var container = document.getElementById('content');
+            container.innerHTML = '';
+
+            if (!disks || disks.length === 0) {
+                container.innerHTML = '<p>Inga diskar hittades.</p>';
+                return;
+            }
+
+            var grid = document.createElement('div');
+            grid.className = 'disk-grid';
+
+            disks.forEach(function(disk, idx) {
+                grid.appendChild(createDiskCard(disk, idx));
+            });
+
+            container.appendChild(grid);
+        }
+
+        function createDiskCard(disk, idx) {
+            var card = document.createElement('div');
+            card.className = 'disk-card';
+
+            // Header
+            var header = document.createElement('div');
+            header.className = 'disk-header';
+
+            var titleDiv = document.createElement('div');
+            var title = document.createElement('h3');
+            title.className = 'disk-title';
+            title.textContent = disk.model || disk.device;
+            if (disk.type) {
+                var typeBadge = document.createElement('span');
+                typeBadge.className = 'disk-type-badge';
+                typeBadge.textContent = disk.type;
+                title.appendChild(typeBadge);
+            }
+            titleDiv.appendChild(title);
+
+            var deviceLine = document.createElement('div');
+            deviceLine.className = 'disk-device';
+            deviceLine.textContent = disk.device;
+            titleDiv.appendChild(deviceLine);
+
+            header.appendChild(titleDiv);
+
+            // Health badge
+            var badge = document.createElement('span');
+            if (disk.healthy === true) {
+                badge.className = 'health-badge health-passed';
+                badge.innerHTML = '&#10003; PASSED';
+            } else if (disk.healthy === false) {
+                badge.className = 'health-badge health-failed';
+                badge.innerHTML = '&#10007; FAILED';
+            } else {
+                badge.className = 'health-badge health-unknown';
+                badge.textContent = '? Okänd';
+            }
+            header.appendChild(badge);
+            card.appendChild(header);
+
+            // Info grid
+            var info = disk.info || {};
+            var infoKeys = Object.keys(info);
+            if (infoKeys.length > 0) {
+                var dl = document.createElement('dl');
+                dl.className = 'info-grid';
+                infoKeys.forEach(function(key) {
+                    var dt = document.createElement('dt');
+                    dt.textContent = key;
+                    dl.appendChild(dt);
+                    var dd = document.createElement('dd');
+                    dd.textContent = info[key];
+                    dl.appendChild(dd);
+                });
+                card.appendChild(dl);
+            }
+
+            // Attributes
+            var attrs = disk.attributes || [];
+            if (attrs.length > 0) {
+                if (disk.type === 'NVMe') {
+                    card.appendChild(renderNvmeAttrs(attrs));
+                } else {
+                    card.appendChild(renderSataAttrs(attrs, idx));
+                }
+            }
+
+            // Error
+            if (disk.error) {
+                var errDiv = document.createElement('div');
+                errDiv.className = 'error-msg';
+                errDiv.textContent = disk.error;
+                card.appendChild(errDiv);
+            }
+
+            return card;
+        }
+
+        function renderNvmeAttrs(attrs) {
+            var section = document.createElement('div');
+            var title = document.createElement('p');
+            title.className = 'attr-section-title';
+            title.textContent = 'NVMe Attribut';
+            section.appendChild(title);
+
+            var grid = document.createElement('div');
+            grid.className = 'nvme-kv';
+
+            attrs.forEach(function(attr) {
+                var item = document.createElement('div');
+                item.className = 'nvme-kv-item';
+
+                var label = document.createElement('span');
+                label.className = 'kv-label';
+                label.textContent = attr.name;
+
+                var value = document.createElement('span');
+                value.className = 'kv-value';
+                value.textContent = attr.raw;
+
+                // Highlight warnings
+                if (attr.name === 'Media and Data Integrity Errors') {
+                    var num = parseInt(attr.raw);
+                    if (num > 0) value.classList.add('attr-warn');
+                }
+                if (attr.name === 'Critical Warning') {
+                    if (attr.raw !== '0x00' && attr.raw !== '0') {
+                        value.classList.add('attr-warn');
+                    }
+                }
+
+                item.appendChild(label);
+                item.appendChild(value);
+                grid.appendChild(item);
+            });
+
+            section.appendChild(grid);
+            return section;
+        }
+
+        function renderSataAttrs(attrs, diskIdx) {
+            var section = document.createElement('div');
+
+            // Split into critical/important and rest
+            var critical = [];
+            var important = [];
+            var other = [];
+
+            attrs.forEach(function(attr) {
+                if (CRITICAL_ATTRS[attr.id]) {
+                    critical.push(attr);
+                } else if (IMPORTANT_ATTRS[attr.id]) {
+                    important.push(attr);
+                } else {
+                    other.push(attr);
+                }
+            });
+
+            var keyAttrs = critical.concat(important);
+
+            if (keyAttrs.length > 0) {
+                var title = document.createElement('p');
+                title.className = 'attr-section-title';
+                title.textContent = 'Nyckelattribut';
+                section.appendChild(title);
+                section.appendChild(createAttrTable(keyAttrs, true));
+            }
+
+            if (other.length > 0) {
+                var toggleId = 'toggle-' + diskIdx;
+                var btn = document.createElement('button');
+                btn.className = 'attr-toggle';
+                btn.id = toggleId;
+                btn.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 3l5 5-5 5V3z"/></svg> Visa alla attribut (' + other.length + ')';
+                btn.onclick = function() {
+                    var details = document.getElementById('details-' + diskIdx);
+                    var expanded = details.classList.toggle('show');
+                    btn.classList.toggle('expanded', expanded);
+                };
+                section.appendChild(btn);
+
+                var details = document.createElement('div');
+                details.className = 'attr-details';
+                details.id = 'details-' + diskIdx;
+                details.appendChild(createAttrTable(other, false));
+                section.appendChild(details);
+            }
+
+            return section;
+        }
+
+        function createAttrTable(attrs, highlight) {
+            var table = document.createElement('table');
+            table.className = 'attr-table';
+
+            var thead = document.createElement('thead');
+            thead.innerHTML = '<tr><th>ID</th><th>Attribut</th><th>Värde</th><th>Sämsta</th><th>Tröskel</th><th>Råvärde</th></tr>';
+            table.appendChild(thead);
+
+            var tbody = document.createElement('tbody');
+            attrs.forEach(function(attr) {
+                var tr = document.createElement('tr');
+
+                // Highlight critical attributes with non-zero raw values
+                var isCritical = !!CRITICAL_ATTRS[attr.id];
+                var rawNum = parseInt(attr.raw);
+                if (isCritical && rawNum > 0 && attr.id !== 9 && attr.id !== 12) {
+                    tr.className = 'attr-highlight';
+                }
+
+                // Warn if value approaching threshold
+                if (attr.thresh && attr.value <= attr.thresh) {
+                    tr.className = 'attr-highlight';
+                }
+
+                tr.innerHTML =
+                    '<td>' + escapeHtml(String(attr.id || '')) + '</td>' +
+                    '<td>' + escapeHtml(attr.name || '') + '</td>' +
+                    '<td>' + escapeHtml(String(attr.value || '')) + '</td>' +
+                    '<td>' + escapeHtml(String(attr.worst || '')) + '</td>' +
+                    '<td>' + escapeHtml(String(attr.thresh || '')) + '</td>' +
+                    '<td>' + escapeHtml(String(attr.raw || '')) + '</td>';
+
+                if (attr.when_failed) {
+                    var cells = tr.querySelectorAll('td');
+                    if (cells.length > 0) {
+                        cells[cells.length - 1].innerHTML += ' <span class="attr-warn">(FAILED: ' + escapeHtml(attr.when_failed) + ')</span>';
+                    }
+                }
+
+                tbody.appendChild(tr);
+            });
+            table.appendChild(tbody);
+            return table;
+        }
+
+        function getMockData() {
+            return [
+                {
+                    device: "/dev/sda",
+                    model: "Intel SSD 520 Series",
+                    type: "SSD",
+                    healthy: true,
+                    info: {
+                        "Device Model": "Intel SSD 520 Series",
+                        "Serial Number": "BTPR12345678",
+                        "Firmware Version": "400i",
+                        "User Capacity": "120,034,123,776 bytes [120 GB]"
+                    },
+                    attributes: [
+                        {id:5, name:"Reallocated_Sector_Ct", value:100, worst:100, thresh:0, raw:"0", type:"Pre-fail"},
+                        {id:9, name:"Power_On_Hours", value:99, worst:99, thresh:0, raw:"46083", type:"Old_age"},
+                        {id:12, name:"Power_Cycle_Count", value:99, worst:99, thresh:0, raw:"142", type:"Old_age"},
+                        {id:194, name:"Temperature_Celsius", value:70, worst:70, thresh:0, raw:"30", type:"Old_age"},
+                        {id:233, name:"Media_Wearout_Indicator", value:89, worst:89, thresh:0, raw:"0", type:"Pre-fail"},
+                    ]
+                },
+                {
+                    device: "/dev/nvme0n1",
+                    model: "Samsung PM9C1 MZVLQ512HBLU",
+                    type: "NVMe",
+                    healthy: true,
+                    info: {
+                        "Model Number": "Samsung PM9C1 MZVLQ512HBLU-00BTW",
+                        "Total NVMe Capacity": "512,110,190,592 [512 GB]",
+                        "Firmware Version": "36301038"
+                    },
+                    attributes: [
+                        {name:"Critical Warning", raw:"0x00"},
+                        {name:"Temperature", raw:"46 Celsius"},
+                        {name:"Available Spare", raw:"100%"},
+                        {name:"Available Spare Threshold", raw:"10%"},
+                        {name:"Percentage Used", raw:"1%"},
+                        {name:"Power On Hours", raw:"892"},
+                        {name:"Power Cycles", raw:"89"},
+                        {name:"Unsafe Shutdowns", raw:"12"},
+                        {name:"Media and Data Integrity Errors", raw:"0"},
+                    ]
+                },
+                {
+                    device: "/dev/sdb",
+                    model: "WDC WD30EZRX-00D8PB0",
+                    type: "HDD",
+                    healthy: true,
+                    info: {
+                        "Model Family": "Western Digital Green",
+                        "Device Model": "WDC WD30EZRX-00D8PB0",
+                        "User Capacity": "3,000,592,982,016 bytes [3.00 TB]",
+                        "Rotation Rate": "5400 rpm"
+                    },
+                    attributes: [
+                        {id:1, name:"Raw_Read_Error_Rate", value:200, worst:200, thresh:51, raw:"0", type:"Pre-fail"},
+                        {id:5, name:"Reallocated_Sector_Ct", value:200, worst:200, thresh:140, raw:"0", type:"Pre-fail"},
+                        {id:9, name:"Power_On_Hours", value:85, worst:85, thresh:0, raw:"46083", type:"Old_age"},
+                        {id:12, name:"Power_Cycle_Count", value:100, worst:100, thresh:0, raw:"98", type:"Old_age"},
+                        {id:194, name:"Temperature_Celsius", value:119, worst:100, thresh:0, raw:"31", type:"Old_age"},
+                        {id:197, name:"Current_Pending_Sector", value:200, worst:200, thresh:0, raw:"0", type:"Old_age"},
+                        {id:198, name:"Offline_Uncorrectable", value:200, worst:200, thresh:0, raw:"0", type:"Old_age"},
+                        {id:199, name:"UDMA_CRC_Error_Count", value:200, worst:200, thresh:0, raw:"0", type:"Old_age"},
+                    ]
+                },
+                {
+                    device: "/dev/sdc",
+                    model: "WDC WD60EFPX-68C5ZN0",
+                    type: "HDD",
+                    healthy: true,
+                    info: {
+                        "Model Family": "Western Digital Red Plus",
+                        "Device Model": "WDC WD60EFPX-68C5ZN0",
+                        "User Capacity": "6,001,175,126,016 bytes [6.00 TB]",
+                        "Rotation Rate": "5640 rpm"
+                    },
+                    attributes: [
+                        {id:1, name:"Raw_Read_Error_Rate", value:200, worst:200, thresh:51, raw:"0", type:"Pre-fail"},
+                        {id:5, name:"Reallocated_Sector_Ct", value:200, worst:200, thresh:140, raw:"0", type:"Pre-fail"},
+                        {id:9, name:"Power_On_Hours", value:100, worst:100, thresh:0, raw:"412", type:"Old_age"},
+                        {id:12, name:"Power_Cycle_Count", value:100, worst:100, thresh:0, raw:"28", type:"Old_age"},
+                        {id:194, name:"Temperature_Celsius", value:117, worst:108, thresh:0, raw:"33", type:"Old_age"},
+                        {id:197, name:"Current_Pending_Sector", value:200, worst:200, thresh:0, raw:"0", type:"Old_age"},
+                        {id:198, name:"Offline_Uncorrectable", value:200, worst:200, thresh:0, raw:"0", type:"Old_age"},
+                    ]
+                }
+            ];
+        }
+
+        // Initial load
+        loadData();
+    </script>
+    <script src="../base1/cockpit.js"></script>
+</body>
+</html>
