@@ -4,6 +4,8 @@ Cockpit plugin that displays S.M.A.R.T. health and attributes for all connected 
 
 > This is a personal hobby project I build for my own use and publish in case it's useful to someone else. I work on it in my spare time, so issues and PRs are welcome but replies may be slow. Use at your own risk.
 
+![SMART health cards per disk (demo data)](docs/screenshot.png)
+
 ## Features
 
 - Health status (PASSED/FAILED) per disk
